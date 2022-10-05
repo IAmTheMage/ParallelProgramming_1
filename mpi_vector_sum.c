@@ -8,7 +8,7 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
-#include </home/ronaldo/opt/openmpi/include/mpi.h>
+#include <mpi.h>
 
 #define N 1<<3
 
@@ -31,33 +31,39 @@ void sum(
     double *vector_pointer3,
     size_t size);
 
-int main(void){        
+int main(int argc, char** argv){        
 
     double *x = NULL, *y = NULL;
     double *local_x = NULL, *local_y = NULL;
+    long vec_size = strtol(argv[1], NULL, 10);
+    int gCount = 0;
 
     int comm_sz;
     int my_rank;
     int local_n;
+    int cond = 0;
 
     MPI_Init(NULL, NULL);
     MPI_Comm_size(MPI_COMM_WORLD, &comm_sz);
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-
-    local_n = N / comm_sz;
-
+    /*if(vec_size % comm_sz == 0) {
+        cond = 1;
+        local_n = vec_size / comm_sz;
+    }
+    else {
+        local_n = (int)vec_size / comm_sz;
+        if(my_rank == 0) local_n = vec_size % comm_sz;
+    }*/
+    local_n = vec_size / comm_sz;
     allocate(&local_x, local_n);
     allocate(&local_y, local_n);
 
     double starttime, endtime;
-       
-    if (my_rank == 0){
-        
-        allocate(&x, N);
-        allocate(&y, N);
-        fill(x, 0.1, N);
-        fill(y, 0.1, N);
-
+    if (my_rank == 0){   
+        allocate(&x, vec_size);
+        allocate(&y, vec_size);
+        fill(x, 0.1, vec_size);
+        fill(y, 0.1, vec_size);
         starttime = MPI_Wtime();
 
     }
