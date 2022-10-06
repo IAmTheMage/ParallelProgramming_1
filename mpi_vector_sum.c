@@ -31,12 +31,20 @@ void sum(
     double *vector_pointer3,
     size_t size);
 
+void allocate_disp(int** disp, size_t size);
+void allocate_send_counts(int** sendCounts, size_t size);
+
 int main(int argc, char** argv){        
 
     double *x = NULL, *y = NULL;
+    double *k = NULL;
     double *local_x = NULL, *local_y = NULL;
+    double* scatterV_Test;
+    int local_received = 0;
+    int mod = 0;
     long vec_size = strtol(argv[1], NULL, 10);
-    int gCount = 0;
+    int* disp;
+    int* sendCounts;
 
     int comm_sz;
     int my_rank;
@@ -46,51 +54,96 @@ int main(int argc, char** argv){
     MPI_Init(NULL, NULL);
     MPI_Comm_size(MPI_COMM_WORLD, &comm_sz);
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-    /*if(vec_size % comm_sz == 0) {
-        cond = 1;
-        local_n = vec_size / comm_sz;
+    
+    local_n = (int)vec_size / comm_sz;
+    local_received = local_n;
+    mod = vec_size % comm_sz;
+    if(my_rank == 0) {
+        local_received += mod;
     }
-    else {
-        local_n = (int)vec_size / comm_sz;
-        if(my_rank == 0) local_n = vec_size % comm_sz;
-    }*/
-    local_n = vec_size / comm_sz;
-    allocate(&local_x, local_n);
-    allocate(&local_y, local_n);
-
+    allocate(&local_x, local_received);
+    allocate(&local_y, local_received);
+    allocate(&scatterV_Test, local_n);
     double starttime, endtime;
     if (my_rank == 0){   
         allocate(&x, vec_size);
         allocate(&y, vec_size);
-        fill(x, 0.1, vec_size);
-        fill(y, 0.1, vec_size);
+        allocate(&k, vec_size);
+        fill(x, 1.0, vec_size);
+        fill(y, 1.0, vec_size);
         starttime = MPI_Wtime();
 
     }
       
-
-    MPI_Scatter(x, local_n, MPI_DOUBLE, local_x, local_n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    MPI_Scatter(y, local_n, MPI_DOUBLE, local_y, local_n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    allocate_disp(&disp, comm_sz);
+    allocate_send_counts(&sendCounts, comm_sz);
+    for(int i = 0; i < comm_sz; i++) {
+        if(i == 0) {
+            sendCounts[i] = local_n + mod;
+        }
+        else {
+            sendCounts[i] = local_n;
+        }
+    }
+    for(int i = 0; i < comm_sz; i++) {
+        if(i == 0) {
+            disp[i] = 0;
+        }
+        else {
+            disp[i] = i * local_n + mod;
+        }
+    }
+    MPI_Scatterv( 
+        x, 
+        sendCounts, 
+        disp,
+        MPI_DOUBLE, 
+        local_x, 
+        local_received, 
+        MPI_DOUBLE,
+        0, 
+        MPI_COMM_WORLD
+    );
+    MPI_Scatterv( 
+        y, 
+        sendCounts, 
+        disp,
+        MPI_DOUBLE, 
+        local_y, 
+        local_received, 
+        MPI_DOUBLE,
+        0, 
+        MPI_COMM_WORLD
+    );
+    sum(local_x, local_y, local_y, local_received);
     
-    sum(local_x, local_y, local_y, local_n);
-
-    MPI_Gather(local_y, local_n, MPI_DOUBLE, y, local_n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Gatherv( 
+        local_y, 
+        local_received, 
+        MPI_DOUBLE, 
+        k, 
+        sendCounts, 
+        disp, 
+        MPI_DOUBLE, 
+        0, MPI_COMM_WORLD);
 
     if (my_rank == 0){
-
+        printf("\nFor process %d dump is: \n", my_rank);
+        for(int i = 0; i < vec_size; i++) {
+            printf(" %f ", k[i]);
+        }
         // print(y, N);
-        
         free(x);
         free(y);
 
         endtime   = MPI_Wtime();
-        printf("That took %f seconds\n",endtime-starttime);
+        //printf("That took %f seconds\n",endtime-starttime);
 
     }
 
     free(local_x);
     free(local_y);
-
+    
     MPI_Finalize();
 
     return 0;
@@ -113,6 +166,18 @@ void fill(
     size_t size){
     for (size_t i = 0; i < size; i++)
         vector_pointer[i] = ratio * i;
+}
+
+
+void allocate_send_counts(
+    int** sendCounts, size_t size
+)
+{
+    *sendCounts = (int*)malloc(size * sizeof(int));
+}
+
+void allocate_disp(int** disp, size_t size) {
+    *disp = (int*)malloc(size * sizeof(int));
 }
 
 void print(
