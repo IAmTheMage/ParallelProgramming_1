@@ -37,7 +37,6 @@ void allocate_send_counts(int** sendCounts, size_t size);
 int main(int argc, char** argv){        
 
     double *x = NULL, *y = NULL;
-    double *k = NULL;
     double *local_x = NULL, *local_y = NULL;
     double* scatterV_Test;
     int local_received = 0;
@@ -63,12 +62,10 @@ int main(int argc, char** argv){
     }
     allocate(&local_x, local_received);
     allocate(&local_y, local_received);
-    allocate(&scatterV_Test, local_n);
     double starttime, endtime;
     if (my_rank == 0){   
         allocate(&x, vec_size);
         allocate(&y, vec_size);
-        allocate(&k, vec_size);
         fill(x, 1.0, vec_size);
         fill(y, 1.0, vec_size);
         starttime = MPI_Wtime();
@@ -80,19 +77,14 @@ int main(int argc, char** argv){
     for(int i = 0; i < comm_sz; i++) {
         if(i == 0) {
             sendCounts[i] = local_n + mod;
-        }
-        else {
-            sendCounts[i] = local_n;
-        }
-    }
-    for(int i = 0; i < comm_sz; i++) {
-        if(i == 0) {
             disp[i] = 0;
         }
         else {
+            sendCounts[i] = local_n;
             disp[i] = i * local_n + mod;
         }
     }
+    double scatterv_time = MPI_Wtime();
     MPI_Scatterv( 
         x, 
         sendCounts, 
@@ -115,30 +107,29 @@ int main(int argc, char** argv){
         0, 
         MPI_COMM_WORLD
     );
+    double scatterv_end_time = MPI_Wtime();
     sum(local_x, local_y, local_y, local_received);
-    
+    double gatherv_time = MPI_Wtime();
     MPI_Gatherv( 
         local_y, 
         local_received, 
         MPI_DOUBLE, 
-        k, 
+        y, 
         sendCounts, 
         disp, 
         MPI_DOUBLE, 
-        0, MPI_COMM_WORLD);
-
+        0, MPI_COMM_WORLD
+    );
+    double gatherv_end_time = MPI_Wtime();
     if (my_rank == 0){
-        printf("\nFor process %d dump is: \n", my_rank);
-        for(int i = 0; i < vec_size; i++) {
-            printf(" %f ", k[i]);
-        }
         // print(y, N);
         free(x);
         free(y);
 
         endtime   = MPI_Wtime();
-        //printf("That took %f seconds\n",endtime-starttime);
-
+        printf("That took %f seconds\n",endtime-starttime);
+        printf("Tempo gasto para o scatterv: %lf\n", scatterv_end_time - scatterv_time);
+        printf("Tempo gasto para o gatherv: %lf\n", gatherv_end_time - gatherv_time);
     }
 
     free(local_x);
